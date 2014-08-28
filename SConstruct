@@ -39,6 +39,7 @@ env.EnableQt4Modules(['QtGui', 'QtCore', 'QtOpenGL'])
 tracerSourceFiles = Split("""
 util/implementation/Util.cpp
 tracer/implementation/Ray.cpp
+geometry/implementation/Shape.cpp
 geometry/implementation/Sphere.cpp
 tracer/implementation/Scene.cpp
 tracer/implementation/Pathtracer.cpp

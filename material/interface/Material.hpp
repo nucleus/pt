@@ -21,6 +21,11 @@ namespace material {
 			emission(_emission), color(_color), type(_type) { }
 		
 	public:
+		bool emissive() const {
+			return emission != glm::vec3(0.0f);
+		}
+		
+	public:
 		glm::vec3 emission;
 		glm::vec3 color;
 		Type type;

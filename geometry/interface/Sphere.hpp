@@ -22,6 +22,8 @@ namespace geometry {
 		bool intersect(const tracer::Ray& ray, tracer::Intersection& isect) const;
 	
 		void drawGL() const;
+		
+		const Sphere& getBoundingSphere() const;
 	
 	public:
 		glm::vec3 normal(const glm::vec3& surfacePoint) const;

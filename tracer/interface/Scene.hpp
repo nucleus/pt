@@ -16,6 +16,8 @@ namespace tracer {
 	class Scene {
 	public:
 		typedef std::vector< geometry::Shape* > Objects;
+		typedef Objects::iterator Iterator;
+		typedef Objects::const_iterator ConstIterator;
 		
 	public:
 		Scene();
@@ -38,19 +40,19 @@ namespace tracer {
 		}
 		
 	public:
-		Objects::iterator begin() {
+		Iterator begin() {
 			return m_objects.begin();
 		}
 		
-		Objects::iterator end() {
+		Iterator end() {
 			return m_objects.end();
 		}
 		
-		Objects::const_iterator begin() const {
+		ConstIterator begin() const {
 			return m_objects.begin();
 		}
 		
-		Objects::const_iterator end() const {
+		ConstIterator end() const {
 			return m_objects.end();
 		}
 		

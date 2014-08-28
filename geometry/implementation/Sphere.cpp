@@ -61,6 +61,10 @@ void geometry::Sphere::drawGL() const {
 	glPopMatrix();
 }
 
+const geometry::Sphere& geometry::Sphere::getBoundingSphere() const {
+	return *this;
+}
+
 glm::vec3 geometry::Sphere::normal(const glm::vec3& surfacePoint) const {
 	return glm::normalize(surfacePoint - position);
 }

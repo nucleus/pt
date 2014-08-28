@@ -5,6 +5,8 @@
 #ifndef RAY_HPP_
 #define RAY_HPP_
 
+#include <glm/interface/glm.hpp>
+
 #include <iostream>
 
 namespace tracer {

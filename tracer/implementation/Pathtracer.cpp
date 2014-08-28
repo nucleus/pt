@@ -17,9 +17,14 @@
 #include <time.h>
 #include <iostream>
 
-float tracer::Pathtracer::epsilon = 0.01f;
+float tracer::Pathtracer::epsilon = 0.001f;
 
-tracer::Pathtracer::Pathtracer(Image& output): m_output(output), m_maxDepth(5), m_samples(64) {
+glm::vec3 tracer::Pathtracer::ex = glm::vec3(1.0f, 0.0f, 0.0f);
+glm::vec3 tracer::Pathtracer::ey = glm::vec3(0.0f, 1.0f, 0.0f);
+glm::vec3 tracer::Pathtracer::ez = glm::vec3(0.0f, 0.0f, 1.0f);
+
+tracer::Pathtracer::Pathtracer(Image& output):
+	m_output(output), m_maxDepth(5), m_samples(64){
 	
 }
 
@@ -72,11 +77,12 @@ void tracer::Pathtracer::trace(const Ray& ray) {
 	std::random_device rd;
 	std::mt19937 engine(rd());
 	const bool debug = true;
-	glm::vec3 rad = radiance(ray, engine, 0, debug);
+	const bool considerEmission = true;
+	glm::vec3 rad = radiance(ray, engine, 0, considerEmission, debug);
 	std::cout << "returned radiance: " << rad << std::endl;
 }
 
-glm::vec3 tracer::Pathtracer::radiance(const Ray& ray, std::mt19937& engine, unsigned depth, bool debug) {
+glm::vec3 tracer::Pathtracer::radiance(const Ray& ray, std::mt19937& engine, unsigned depth, bool considerEmission, bool debug) {
 	std::uniform_real_distribution<float> distribution(0.0f, 1.0f);
 	float distance, minimumDistance = std::numeric_limits<float>::max();
 	Intersection tmp, isect;
@@ -96,15 +102,19 @@ glm::vec3 tracer::Pathtracer::radiance(const Ray& ray, std::mt19937& engine, uns
 	if (isect.valid) {
 		if (debug) { std::cout << "found intersection @ " << isect.point << ", normal: " << isect.normal << std::endl; }
 		
+		// russian roulette
 		const material::Material& material = isect.object->getMaterial();
 		glm::vec3 objectColor = material.color;
-		glm::vec3 ex(1.0f, 0.0f, 0.0f), ey(0.0f, 1.0f, 0.0f), ez(0.0f, 0.0f, 1.0f);
 		float p = MAX(objectColor.r, objectColor.g, objectColor.b);
 		if (++depth > 5) {
 			if (distribution(engine) < p) {
 				objectColor = objectColor / p;
 			} else {
-				return material.emission;
+				if (considerEmission) {
+					return material.emission;
+				} else {
+					return glm::vec3(0.0f);
+				}
 			}
 		}
 		
@@ -120,14 +130,20 @@ glm::vec3 tracer::Pathtracer::radiance(const Ray& ray, std::mt19937& engine, uns
 			glm::vec3 v = glm::normalize( glm::cross(w, u) );
 			glm::vec3 d = glm::normalize((float)(cos(r1) * r2s) * u + (float)(sin(r1) * r2s) * v + (float)sqrt(1-r2) * w);
 			Ray scatteredRay(isect.point+epsilon*isect.normal, d);
-			
 			if (debug) { std::cout << "tracing next ray: " << scatteredRay << std::endl; }
-			return material.emission + objectColor * radiance(scatteredRay, engine, depth, debug);
+			
+			// compose output color
+			glm::vec3 color = (considerEmission ? material.emission : glm::vec3(0.0f));
+			// add direct lighting contribution
+			color += sampleDirectLighting(isect.point, isect.normal, objectColor, engine);
+			// add indirect lighting contribution
+			color += objectColor * radiance(scatteredRay, engine, depth, false, debug);
+			return color;
 		} else if (material.type == material::Material::Type_reflective) {
 			if (debug) { std::cout << "shading reflective material" << std::endl; }
 			
 			Ray reflectedRay(isect.point+epsilon*isect.normal, glm::reflect(ray.dir, isect.normal));
-			return material.emission + objectColor * radiance(reflectedRay, engine, depth, debug); 
+			return material.emission + objectColor * radiance(reflectedRay, engine, depth, true, debug); 
 		} else {
 			error("Unhandled material type detected");
 			return m_scene.getBackgroundColor();
@@ -136,4 +152,53 @@ glm::vec3 tracer::Pathtracer::radiance(const Ray& ray, std::mt19937& engine, uns
 		if (debug) { std::cout << "found no intersection" << std::endl; }
 		return m_scene.getBackgroundColor();
 	}
+}
+
+glm::vec3 tracer::Pathtracer::sampleDirectLighting(const glm::vec3& position,
+	const glm::vec3& normal, const glm::vec3& objColor, std::mt19937& engine) {
+
+	glm::vec3 e;
+	std::uniform_real_distribution<float> distribution(0.0f, 1.0f);
+	for (auto it = m_scene.begin(); it != m_scene.end(); ++it) {
+		const material::Material& material = (*it)->getMaterial();
+		if (!material.emissive()) {
+			continue;
+		}
+		const geometry::Sphere& bounds = (*it)->getBoundingSphere();
+		glm::vec3 sw = bounds.position - position;
+		glm::vec3 su = glm::normalize( glm::cross((fabs(sw.x) > 0.1f ? ey : ex), sw) );
+		glm::vec3 sv = glm::normalize( glm::cross(sw, su) );
+		float camax = sqrt(1.0f-bounds.radius * bounds.radius / glm::dot((position - bounds.position), (position - bounds.position)));
+		float eps1 = distribution(engine), eps2 = distribution(engine);
+		float ca = 1.0f - eps1 + eps1 * camax;
+		float sa = sqrt(1.0f - ca * ca);
+		float phi = 2 * M_PI * eps2;
+		glm::vec3 d = glm::normalize( (float)(cos(phi)*sa) * su + (float)(sin(phi)*sa) * sv + (float)ca * sw );
+		if (!shadowRayOccluded(Ray(position, d), it)) {
+			float omega = 2 * M_PI * (1.0f - camax);
+			e = e + objColor * material.emission * glm::dot(d, normal) * omega * (float)M_1_PI;
+		}
+	}
+	
+	return e;
+}
+
+bool tracer::Pathtracer::shadowRayOccluded(const Ray& ray, const Scene::ConstIterator& lightSource) {
+	float distance, minimumDistance = std::numeric_limits<float>::max();
+	Intersection isect, tmp;
+	for (auto it = m_scene.begin(); it != m_scene.end(); ++it) {
+		if ((*it)->intersect(ray, tmp)) {
+			tmp.valid = true;
+			if ((distance = glm::distance2(ray.org, tmp.point)) < minimumDistance) {
+				isect = tmp;
+				distance = minimumDistance;
+			}
+		}
+	}
+	
+	if (isect.valid && isect.object->getId() == (*lightSource)->getId()) {
+		return false;
+	}
+	
+	return true;
 }

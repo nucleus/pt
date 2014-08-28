@@ -34,7 +34,11 @@ namespace tracer {
 		void trace(const Ray& ray);
 		
 	protected:
-		glm::vec3 radiance(const Ray& ray, std::mt19937& engine, unsigned depth = 0, bool debug = false); 
+		glm::vec3 radiance(const Ray& ray, std::mt19937& engine, unsigned depth = 0, bool considerEmission = true, bool debug = false); 
+		
+		glm::vec3 sampleDirectLighting(const glm::vec3& position, const glm::vec3& normal, const glm::vec3& objColor, std::mt19937& engine);
+		
+		bool shadowRayOccluded(const Ray& ray, const Scene::ConstIterator& lightSource);
 		
 	protected:
 		Scene m_scene;
@@ -44,6 +48,7 @@ namespace tracer {
 		unsigned m_samples;
 		
 		static float epsilon;
+		static glm::vec3 ex, ey, ez;
 	};
 
 }
